@@ -1,0 +1,14 @@
+node_modules
+.DS_Store
+dist
+dist-ssr
+*.local
+count.txt
+.env
+.nitro
+.tanstack
+.wrangler
+.output
+.vinxi
+todos.json
+e4ca4e4d-4f7a-4a74-8ef0-5656accdb157_1/
