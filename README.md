@@ -1,6 +1,8 @@
-Welcome to your new TanStack app! 
+# Garmin Year In Review
 
-# Getting Started
+![](./screenshots/start.png)
+![](./screenshots/report1.png)
+![](./screenshots/report2.png)
 
 To run this application:
 
