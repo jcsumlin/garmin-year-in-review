@@ -5,7 +5,7 @@ import { StepSectionData } from '@/types';
 import { useMemo } from 'react';
 
 
-function numberWithCommas(x: number) {
+export function numberWithCommas(x: number) {
     return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 

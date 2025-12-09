@@ -33,14 +33,20 @@ export default function StepProgress({ children }: { children: ReactNode[] }) {
         if (activeStep === step) return progress
         return 0
     }
+
+    const setStep = (step: number) => () => {
+        setActiveStep(step)
+        setProgress(0)
+    }
+
     return (
         <div>
             <div className='flex mb-4 gap-1'>
-                <Progress value={getProgress(0)} />
-                <Progress value={getProgress(1)} />
-                <Progress value={getProgress(2)} />
-                <Progress value={getProgress(3)} />
-                <Progress value={getProgress(4)} />
+                <Progress value={getProgress(0)} onClick={setStep(0)} />
+                <Progress value={getProgress(1)} onClick={setStep(1)} />
+                <Progress value={getProgress(2)} onClick={setStep(2)} />
+                <Progress value={getProgress(3)} onClick={setStep(3)} />
+                <Progress value={getProgress(4)} onClick={setStep(4)} />
             </div>
             <div className='flex justify-between mb-8'>
                 <ListRestart onClick={() => setActiveStep(0)} />

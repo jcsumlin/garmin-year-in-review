@@ -1,16 +1,20 @@
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Activity, TrendingUp, Flame, Clock, Award, ArrowDown, ArrowUp } from 'lucide-react';
+import { ArrowDown, ArrowUp } from 'lucide-react';
 import JSZip from 'jszip';
 import type { ActivitiesExport, GarminActivity, DailySummary } from 'garmin-export-parser';
-import type { Month, SleepData, Stats, StepSectionData } from '@/types';
+import type { ActivityState, Month, SleepData, Stats, StepSectionData } from '@/types';
 import { cn } from '@/lib/utils';
 import ReportWrapper from './report/ReportWrapper';
 import StepSection from './report/StepSection';
 import SleepSection from './report/SleepSection';
 import { useExportFile } from '@/providers/ExportFileProvider';
 import StepProgress from './report/StepProgress';
+import ActivitySection from './report/ActivitySection';
+
+const cmToMile = 0.00000621
+const reportYear = 2025;
 
 const formatDuration = (milliseconds: number) => {
     const minutes = milliseconds / 60000
@@ -68,8 +72,69 @@ async function getStepData(files: { [key: string]: JSZip.JSZipObject }, jsonFile
     return { monthlySteps, highestStepDay };
 }
 
-const cmToMile = 0.00000621
-const reportYear = 2025;
+async function getActivityData(files: { [key: string]: JSZip.JSZipObject }, jsonFiles: string[], year = reportYear): Promise<ActivityState> {
+    // Parse all JSON files
+    let thisYearActivities: GarminActivity[] = [];
+    const summaryFile = jsonFiles.find(fname => fname.includes('summarizedActivities.json'));
+    if (!summaryFile) {
+        throw new Error('Could not find summarizedActivities.json file!')
+    }
+    const summaryActivities: ActivitiesExport[] = summaryFile ? JSON.parse(await files[summaryFile].async('string')) : [];
+    if (summaryActivities.length === 0) {
+        throw new Error('summarizedActivities.json file could not be read!')
+    }
+    const favoriteActivityMap: Record<string, number> = {};
+    let longestActivity = 0;
+    const monthlyActivities: number[] = Array(12).fill(0);
+    let activityCount = 0;
+    let totalDuration = 0;
+    let totalCalories = 0;
+
+
+    summaryActivities[0].summarizedActivitiesExport.forEach((activity) => {
+        const timestamp = activity.beginTimestamp
+        var date = new Date(timestamp);
+
+        if (date.getFullYear() === year) {
+            if (Object.keys(favoriteActivityMap).includes(activity.activityType)) {
+                favoriteActivityMap[activity.activityType] += 1
+            } else {
+                favoriteActivityMap[activity.activityType] = 1
+            }
+            if (activity.duration > longestActivity) {
+                longestActivity = activity.duration
+            }
+            const activityDate = new Date(activity.beginTimestamp)
+            monthlyActivities[activityDate.getMonth()] += 1
+            activityCount++;
+            totalDuration += activity.duration
+            totalCalories += activity.calories
+
+            return thisYearActivities.push(activity);
+        }
+    });
+
+    if (thisYearActivities.length === 0) {
+        throw new Error('No activities for 2025 found in the files');
+    }
+
+    const favoriteActivity = Object.entries(favoriteActivityMap).sort((a, b) => b[1] - a[1])[0];
+    const avgDuration = totalDuration / activityCount;
+    const mostActiveMonth = Object.entries(monthlyActivities).sort((a, b) => b[1] - a[1])[0];
+    const longestActivityFormatted = formatDuration(longestActivity);
+    return {
+        averageDuration: Math.round(avgDuration / 1000),
+        totalActivities: thisYearActivities.length,
+        totalCalories: Math.round(thisYearActivities.reduce((acc, curr) => acc + (curr.calories || 0), 0)),
+        favoriteActivity: favoriteActivity ? favoriteActivity[0] : '',
+        favoriteActivityCount: favoriteActivity ? favoriteActivity[1] : 0,
+        longestActivity: longestActivityFormatted,
+        mostActiveMonth: mostActiveMonth ? mostActiveMonth[0] : '',
+        mostActiveMonthCount: mostActiveMonth ? mostActiveMonth[1] : 0
+    }
+}
+
+
 
 
 export default function GarminYearReview() {
@@ -88,42 +153,26 @@ export default function GarminYearReview() {
             setError(null);
             const sleepData = await getSleepData(contents, jsonFiles);
             const stepData = await getStepData(contents, jsonFiles);
+            const activityData = await getActivityData(contents, jsonFiles);
+            const lastYearActivityData = await getActivityData(contents, jsonFiles, reportYear - 1);
 
-
-            // const fileContent = await contents['customer_data/customer.json'].async('string');
-            // const customerData = JSON.parse(fileContent);
-            // setCustomerName(customerData.displayName || 'Garmin User');
-
-            // Parse all JSON files
-            let thisYearActivities: GarminActivity[] = [];
-            let lastYearActivities: GarminActivity[] = [];
-            const summaryFile = jsonFiles.find(fname => fname.includes('summarizedActivities.json'));
-            if (!summaryFile) {
-                throw new Error('Could not find summarizedActivities.json file!')
+            const thisYearStats = {
+                stepData,
+                activityData,
+                sleepData
             }
-            const summaryActivities: ActivitiesExport[] = summaryFile ? JSON.parse(await contents[summaryFile].async('string')) : [];
-            if (summaryActivities.length === 0) {
-                throw new Error('summarizedActivities.json file could not be read!')
-            }
-            summaryActivities[0].summarizedActivitiesExport.forEach((activity) => {
-                const timestamp = activity.beginTimestamp
-                var date = new Date(timestamp);
-                if (date.getFullYear() === reportYear) {
-                    return thisYearActivities.push(activity);
-                }
-                if (date.getFullYear() === (reportYear - 1)) {
-                    return lastYearActivities.push(activity)
-                }
-            });
-
-            if (thisYearActivities.length === 0) {
-                throw new Error('No activities for 2025 found in the files');
+            const lastYearStats = {
+                stepData: {
+                    monthlySteps: {
+                        Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0,
+                        Jul: 0, Aug: 0, Sep: 0, Oct: 0, Nov: 0, Dec: 0
+                    },
+                    highestStepDay: null
+                },
+                activityData: lastYearActivityData,
+                sleepData: [] as SleepData[]
             }
 
-            const thisYearStats = calculateActivityStats(thisYearActivities);
-            thisYearStats.stepData = stepData
-            thisYearStats.sleepData = sleepData
-            const lastYearStats = calculateActivityStats(lastYearActivities);
             setData([thisYearStats, lastYearStats]);
             setLoading(false);
         } catch (err) {
@@ -133,60 +182,12 @@ export default function GarminYearReview() {
         }
     };
 
-    const calculateActivityStats = (activities: GarminActivity[]): Stats => {
-        let totalDistanceMiles = 0;
-        let totalDuration = 0;
-        let totalCalories = 0;
-        let activityCount = 0;
-        const activityTypes: Record<string, number> = {};
-        let longestActivity = 0;
-        let monthlyActivities: number[] = Array(12).fill(0);
-
-        activities.forEach((activity) => {
-            // Handle various Garmin JSON field names
-            if (activity.activityType === 'running') {
-                // Handle running-specific fields
-                totalDistanceMiles += activity.distance * cmToMile;
-            }
-            totalDuration += activity.duration
-            totalCalories += activity.calories
-            if (Object.keys(activityTypes).includes(activity.activityType)) {
-                activityTypes[activity.activityType] += 1
-            } else {
-                activityTypes[activity.activityType] = 1
-            }
-            if (activity.duration > longestActivity) {
-                longestActivity = activity.duration
-            }
-            const activityDate = new Date(activity.beginTimestamp)
-            monthlyActivities[activityDate.getMonth()] += 1
-            activityCount++;
-        });
-
-        const favoriteActivity = Object.entries(activityTypes).sort((a, b) => b[1] - a[1])[0];
-        const avgDuration = totalDuration / activityCount;
-        const mostActiveMonth = Object.entries(monthlyActivities).sort((a, b) => b[1] - a[1])[0];
-        return {
-            totalActivities: activityCount,
-            totalDistance: totalDistanceMiles.toFixed(1),
-            totalDuration: Math.round(totalDuration),
-            totalCalories: Math.round(totalCalories),
-            favoriteActivity: favoriteActivity ? favoriteActivity[0] : 'N/A',
-            favoriteActivityCount: favoriteActivity ? favoriteActivity[1] : 0,
-            longestActivity: Math.round(longestActivity),
-            stepData: { monthlySteps: {}, highestStepDay: null },
-            avgDuration: Math.round(avgDuration),
-            mostActiveMonth: mostActiveMonth ? mostActiveMonth[0] : 'N/A',
-            mostActiveMonthCount: mostActiveMonth ? mostActiveMonth[1] : 0
-        };
-    };
-
     useEffect(() => {
         handleFileUpload();
     }, []);
 
 
-    const moreActivitiesThisYear = data && (data[0].totalActivities - data[1].totalActivities) > 0
+    const moreActivitiesThisYear = data && (data[0].activityData.totalActivities - data[1].activityData.totalActivities) > 0
 
     if (loading) {
         return (
@@ -225,11 +226,11 @@ export default function GarminYearReview() {
                         <CardContent className="pt-6">
                             <div className="text-center">
                                 <p className="text-sm opacity-90 mb-2">Total Activities Logged this year</p>
-                                <p className="text-6xl font-bold mb-2">{data[0].totalActivities}</p>
+                                <p className="text-6xl font-bold mb-2">{data[0].activityData.totalActivities}</p>
                                 <div className='flex justify-center'>
                                     {moreActivitiesThisYear ? <ArrowUp className='my-auto text-green-500' /> : <ArrowDown className={cn('my-auto text-red-500')} />}
                                     <p className={cn('text-5xl font-bold mb-2', (moreActivitiesThisYear ? "text-green-500" : 'text-red-500'))}>
-                                        {data[0].totalActivities - data[1].totalActivities} <span className='text-sm text-white'>yoy</span>
+                                        {data[0].activityData.totalActivities - data[1].activityData.totalActivities} <span className='text-sm text-white'>yoy</span>
                                     </p>
                                 </div>
                             </div>
@@ -237,90 +238,18 @@ export default function GarminYearReview() {
                     </Card>
                     <StepSection data={data[0].stepData} />
                     <SleepSection sleepData={data[0].sleepData} />
+                    <ActivitySection activityData={data[0].activityData} />
+                    <Card className="h-[calc(100vh-7rem)] bg-linear-to-br from-green-50 to-blue-50 border-green-200">
+                        <CardContent className="pt-6 text-center">
+                            <p className="text-lg font-semibold text-gray-800 mb-2">
+                                Amazing work this year! 🎉
+                            </p>
+                            <p className="text-sm text-gray-600">
+                                You've shown incredible dedication. Here's to an even stronger {reportYear + 1}!
+                            </p>
+                        </CardContent>
+                    </Card>
                 </StepProgress>
-
-                {/* Stats Grid */}
-                <h2 className='text-xl font-bold'>Activity Highlights</h2>
-                <div className="grid grid-cols-2 gap-4">
-                    <Card>
-                        <CardContent className="pt-6">
-                            <Activity className="w-8 h-8 text-blue-500 mb-3" />
-                            <p className="text-2xl font-bold">{data[0].totalDistance}</p>
-                            <p className="text-sm text-gray-600">mi ran/walked</p>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardContent className="pt-6">
-                            <Clock className="w-8 h-8 text-green-500 mb-3" />
-                            <p className="text-2xl font-bold">{formatDuration(data[0].totalDuration)}</p>
-                            <p className="text-sm text-gray-600">total time</p>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardContent className="pt-6">
-                            <Flame className="w-8 h-8 text-orange-500 mb-3" />
-                            <p className="text-2xl font-bold">{data[0].totalCalories}</p>
-                            <p className="text-sm text-gray-600">calories burned</p>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardContent className="pt-6">
-                            <TrendingUp className="w-8 h-8 text-purple-500 mb-3" />
-                            <p className="text-2xl font-bold">{formatDuration(data[0].avgDuration)}</p>
-                            <p className="text-sm text-gray-600">avg workout</p>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Highlights */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Award className="w-5 h-5" />
-                            Your Highlights
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div>
-                            <p className="text-sm text-gray-600 mb-1">Favorite Activity</p>
-                            <p className="text-xl font-semibold">
-                                {data[0].favoriteActivity}
-                                <span className="text-sm text-gray-500 ml-2">
-                                    ({data[0].favoriteActivityCount} times)
-                                </span>
-                            </p>
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-600 mb-1">Longest Workout</p>
-                            <p className="text-xl font-semibold">{formatDuration(data[0].longestActivity)}</p>
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-600 mb-1">Most Active Month</p>
-                            <p className="text-xl font-semibold">
-                                {data[0].mostActiveMonth}
-                                <span className="text-sm text-gray-500 ml-2">
-                                    ({data[0].mostActiveMonthCount} activities)
-                                </span>
-                            </p>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Motivational Message */}
-                <Card className="bg-linear-to-br from-green-50 to-blue-50 border-green-200">
-                    <CardContent className="pt-6 text-center">
-                        <p className="text-lg font-semibold text-gray-800 mb-2">
-                            Amazing work this year! 🎉
-                        </p>
-                        <p className="text-sm text-gray-600">
-                            You've shown incredible dedication. Here's to an even stronger {reportYear + 1}!
-                        </p>
-                    </CardContent>
-                </Card>
-
                 {/* Reset Button */}
                 <Button
                     onClick={() => setData(null)}

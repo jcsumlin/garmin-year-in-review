@@ -236,3 +236,13 @@ export interface SleepScores {
 
 export type Month = 'Jan' | 'Feb' | 'Mar' | 'Apr' | 'May' | 'Jun' | 'Jul' | 'Aug' | 'Sep' | 'Oct' | 'Nov' | 'Dec';
 
+export interface ActivityState {
+    averageDuration: number;
+    totalActivities: number;
+    totalCalories: number;
+    favoriteActivity: string;
+    favoriteActivityCount: number;
+    longestActivity: number;
+    mostActiveMonth: string;
+    mostActiveMonthCount: number;
+}
