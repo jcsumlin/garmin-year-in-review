@@ -1,8 +1,10 @@
-import Steps from '@/components/Steps'
-import { Progress } from '@/components/ui/progress'
-import { cn } from '@/lib/utils'
-import { createFileRoute } from '@tanstack/react-router'
-import { Pause } from 'lucide-react'
+import Header from '@/components/report/Header'
+import ReportWrapper from '@/components/report/ReportWrapper'
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
+import { useExportFile } from '@/providers/ExportFileProvider'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import JSZip from 'jszip'
+import { Upload } from 'lucide-react'
 import { useState } from 'react'
 
 export const Route = createFileRoute('/')({
@@ -10,35 +12,88 @@ export const Route = createFileRoute('/')({
 })
 
 function RouteComponent() {
-  const [activeStep, setActiveStep] = useState(0)
-  const [progress, setProgress] = useState(50)
-  const [paused, setPaused] = useState(false)
-  return <div>
-    <div className='flex mb-4'>
-      <Progress value={activeStep < 0 ? progress : 0} className="" />
-      <Progress value={activeStep < 1 ? progress : 0} className="ml-1" />
-      <Progress value={activeStep < 2 ? progress : 0} className="ml-1" />
-      <Progress value={activeStep < 3 ? progress : 0} className="ml-1" />
-      <Progress value={activeStep < 4 ? progress : 0} className="ml-1" />
-    </div>
-    <div className='flex justify-between mb-8'>
-      <div className=''>
-        <h1><strong>Garmin</strong> Year in Review</h1>
-      </div>
-      <div>
-        <Pause className={cn('inline-block mr-2', paused && 'text-red-500')} size={16} onClick={() => setPaused(!paused)} />
-      </div>
-    </div>
-    <Steps />
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const navigate = useNavigate()
+  const { setData, setFiles } = useExportFile()
 
-    <strong>123</strong> Steps
-    <strong>80 avg</strong> Sleep Score
-    <strong>70 avg high</strong> Body Battery
-    <strong>123</strong> Total Activities
-    <strong>123 Running</strong> Top Activity
-    <strong>123h 123m</strong> Activity Time
-    <strong>2.5km</strong> Activity Distance
-    <strong>320m</strong> Activity Ascent
-    <strong>123</strong> Active Calories
-  </div>
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'application/zip' && !file.name.endsWith('.zip')) {
+      setError('Please upload a valid ZIP file.');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const zip = new JSZip();
+      const contents = await zip.loadAsync(file);
+
+      // Find all JSON files in the zip
+      const jsonFiles = Object.keys(contents.files).filter(
+        filename => filename.endsWith('.json') && !contents.files[filename].dir
+      );
+
+      if (jsonFiles.length === 0) {
+        throw new Error('No JSON files found in ZIP');
+      }
+
+      // Store data in route context instead of navigation state
+      setData(contents.files)
+      setFiles(jsonFiles)
+
+      // Navigate to /review (no state needed)
+      navigate({ to: '/review' });
+      setLoading(false);
+    } catch (err: unknown) {
+      console.error('Error:', err);
+      const message = err instanceof Error ? err.message : 'Failed to process ZIP file. Please ensure it\'s a valid Garmin export.';
+      setError(message);
+      setLoading(false);
+    }
+  };
+  return (
+    <ReportWrapper>
+      <Header />
+      <Card className="mb-6 border-2 border-dashed">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Upload className="w-5 h-5" />
+            Upload Your Data
+          </CardTitle>
+          <CardDescription>
+            Upload the ZIP file exported from <a className="text-blue-500" href='https://www.garmin.com/en-US/account/datamanagement/'>Garmin Connect</a> export data
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <label htmlFor="file-upload" className="cursor-pointer">
+            <div className="border-2 border-gray-300 border-dashed rounded-lg p-8 text-center hover:border-blue-500 transition-colors">
+              <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+              <p className="text-sm text-gray-600 mb-2">
+                Click to upload
+              </p>
+              <p className="text-xs text-gray-500">ZIP files only</p>
+            </div>
+            <input
+              id="file-upload"
+              type="file"
+              accept=".zip"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+          </label>
+          {loading && (
+            <p className="text-center text-blue-600 mt-4">Processing ZIP file...</p>
+          )}
+          {error && (
+            <p className="text-center text-red-600 mt-4 text-sm">{error}</p>
+          )}
+        </CardContent>
+      </Card>
+
+    </ReportWrapper>
+  )
 }

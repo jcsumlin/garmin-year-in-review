@@ -18,7 +18,7 @@ export default function SleepSection({ sleepData }: { sleepData: SleepData[] }) 
     const averageSleepScore = sleepData.reduce((acc, curr) => acc + (curr.sleepScores?.overallScore || 0), 0) / sleepData.length || 0
     const highestSleepScoreDay = sleepData.reduce((prev, current) => (prev.sleepScores && current.sleepScores && (prev.sleepScores.overallScore > current.sleepScores.overallScore) ? prev : current), sleepData[0]);
     return (
-        <section className='h-lvh bg-linear-to-b from-indigo-500 from-10% via-gray-900 via-50% to-gray-900 to-90% rounded-lg p-6 flex flex-col'>
+        <section className='h-[calc(100vh-7rem)] bg-linear-to-b from-indigo-500 from-10% via-gray-900 via-50% to-gray-900 to-90% rounded-lg p-6 flex flex-col'>
             <div className='bg-purple-500 rounded-full flex py-2 px-4 w-fit my-4'>
                 <Moon className='fill-white size-5 mr-2 my-auto' />
                 <h2 className='text-xl font-bold text-white'>SLEEP SCORE</h2>

@@ -177,6 +177,12 @@ export interface Measurement {
     valid: boolean
 }
 
+
+interface StepSectionData {
+    monthlySteps: Record<Month, number>;
+    highestStepDay: { date: string; steps: number; } | null;
+}
+
 interface Stats {
     totalActivities: number;
     totalDistance: string;
@@ -187,7 +193,7 @@ interface Stats {
     longestActivity: number;
     avgDuration: number;
     mostActiveMonth: string;
-    stepData: Record<string, number>;
+    stepData: StepSectionData;
     sleepData: SleepData[];
     mostActiveMonthCount: number;
 }
@@ -227,3 +233,6 @@ export interface SleepScores {
     feedback: string
     insight: string
 }
+
+export type Month = 'Jan' | 'Feb' | 'Mar' | 'Apr' | 'May' | 'Jun' | 'Jul' | 'Aug' | 'Sep' | 'Oct' | 'Nov' | 'Dec';
+
